@@ -3,4 +3,6 @@ x64/
 Debug/
 WpfMediaCapture/Debug
 WpfMediaCapture/x64
-WpfMediaCapture/out/
+FFmpegLib/x64/Debug
+FFmpegLib/x64
+FFmpegLib/out/

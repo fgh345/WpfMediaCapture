@@ -2,9 +2,12 @@
 
 using namespace std;
 
+bool isPre = false;//输出准备完成
+
 FFmpegLib::FFmpegLib()
 {
 	avdevice_register_all();
+	//avformat_network_init();
 }
 
 FFmpegLib::~FFmpegLib()
@@ -34,7 +37,7 @@ AVCodecContext* FFmpegLib::CreateEncodec(int cid)
 	return c;
 }
 
-AVCodecContext* FFmpegLib::CreateVideoEncodec(int cid,int width_output, int heigth_output) {
+AVCodecContext* FFmpegLib::CreateVideoEncodec(int cid,int width_output, int heigth_output, int frame_rate) {
 	AVCodecContext* codecContext_output = CreateEncodec(cid);
 
 	codecContext_output->pix_fmt = AV_PIX_FMT_YUV420P;//像素格式
@@ -43,12 +46,15 @@ AVCodecContext* FFmpegLib::CreateVideoEncodec(int cid,int width_output, int heig
 	codecContext_output->gop_size = 30;// 设置每gop_size个帧一个关键帧
 	codecContext_output->qmin = 1;//决定像素块大小 qmin越大  画面块状越明显
 	codecContext_output->qmax = 20;
-	codecContext_output->max_b_frames = 4;//设置b帧是p帧的倍数
+	//codecContext_output->time_base = {1,frame_rate };
+	codecContext_output->framerate = { frame_rate,1};
+	codecContext_output->max_b_frames = 0;//设置b帧是p帧的倍数
 
 	AVDictionary* param = 0;
 	if (codecContext_output->codec_id == AV_CODEC_ID_H264) {
 		av_dict_set(&param, "preset", "superfast", 0);//superfast slow
 		av_dict_set(&param, "tune", "zerolatency", 0);
+		av_dict_set(&param, "profile", "main", 0);
 	}
 
 	if (avcodec_open2(codecContext_output, codecContext_output->codec, &param))
@@ -66,6 +72,7 @@ AVCodecContext* FFmpegLib::CreateAudioEncodec(int cid,int sample_rate) {
 	codecContext_output->sample_rate = sample_rate;
 	codecContext_output->channel_layout = AV_CH_LAYOUT_STEREO;
 	codecContext_output->channels = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
+	//codecContext_output->time_base = { 1,sample_rate };
 	//codecContext_output->bit_rate = out_audio_bit_rate;
 
 
@@ -88,8 +95,10 @@ AVFormatContext* FFmpegLib::CreateFormatOutput(const char* format_name ,const ch
 	return formatContext_output;
 }
 
-int FFmpegLib::EncodecFrame(AVFormatContext* formatContext_output,AVCodecContext* codecContext_output, AVPacket* avpkt_out, AVFrame* avFrame_output)
+int FFmpegLib::EncodecFrame(AVFormatContext* formatContext_output,AVCodecContext* codecContext_output, AVPacket* avpkt_in, AVPacket* avpkt_out, AVFrame* avFrame_output, AVRational itime)
 {
+	//mutex().lock();
+
 	int ret = avcodec_send_frame(codecContext_output, avFrame_output);
 	if (ret) {
 		XError(ret,"avcodec_send_frame");
@@ -103,13 +112,39 @@ int FFmpegLib::EncodecFrame(AVFormatContext* formatContext_output,AVCodecContext
 		return ret;
 	}
 
+	if (codecContext_output->codec_type == AVMEDIA_TYPE_VIDEO) {
+		avpkt_out->stream_index = 0;
 
-	printf("pts:%d,dts:%d,size:%d,duration:%d\n", avpkt_out->pts, avpkt_out->dts, avpkt_out->size, avpkt_out->duration);
+		//AVRational itime = ictx->streams[packet.stream_index]->time_base;
+		AVRational otime = formatContext_output->streams[avpkt_out->stream_index]->time_base;
+
+		avpkt_out->pts = av_rescale_q_rnd(avpkt_out->pts, itime, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		avpkt_out->dts = av_rescale_q_rnd(avpkt_out->dts, itime, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		avpkt_out->duration = av_rescale_q_rnd(avpkt_out->duration, itime, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		avpkt_out->pos = -1;
+
+
+		printf("                                                      @@pts:%d,dts:%d,size:%d,duration:%d\n", avpkt_out->pts, avpkt_out->dts, avpkt_out->size, avpkt_out->duration);
+	}else if (codecContext_output->codec_type== AVMEDIA_TYPE_AUDIO)
+	{
+		avpkt_out->stream_index = 1;
+
+		AVRational otime = formatContext_output->streams[avpkt_out->stream_index]->time_base;
+
+		avpkt_out->pts = av_rescale_q_rnd(avpkt_out->pts, itime, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		avpkt_out->dts = av_rescale_q_rnd(avpkt_out->dts, itime, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		avpkt_out->duration = av_rescale_q_rnd(avpkt_out->duration, itime, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		avpkt_out->pos = -1;
+
+		printf("##pts:%d,dts:%d,size:%d,duration:%d\n", avpkt_out->pts, avpkt_out->dts, avpkt_out->size, avpkt_out->duration);
+	} 
+
 	ret = av_interleaved_write_frame(formatContext_output, avpkt_out);
 	if (ret)
 	{
-		XError(ret,"av_interleaved_write_frame");
+		XError(ret, "av_interleaved_write_frame");
 	}
+
 	return ret;
 }
 
@@ -124,14 +159,14 @@ AVStream* FFmpegLib::CreateStream(AVFormatContext* formatContext, AVCodecContext
 
 void FFmpegLib::OpenOutputIO(AVFormatContext* formatContext, const char* url) {
 
-	//if (formatContext->nb_streams == 1)
-	//{
-	//	while (true)
-	//	{
-	//		if (formatContext->nb_streams == 2)
-	//			return;
-	//	}
-	//}
+	if (formatContext->nb_streams == 1)
+	{
+		while (true)
+		{
+			if (isPre)
+				return;
+		}
+	}
 
 	//Open output URL
 	if (avio_open2(&formatContext->pb, url, AVIO_FLAG_READ_WRITE, NULL, NULL) < 0) {
@@ -148,18 +183,31 @@ void FFmpegLib::OpenOutputIO(AVFormatContext* formatContext, const char* url) {
 	{
 		cout << "stream_timebase-" << i << ":" << formatContext->streams[i]->time_base.den << endl;
 	}
+	isPre = true;
 }
 
 AVFormatContext* FFmpegLib::OpenCamera(const char* vdevice_in_url)
 {
+
+	//char szVedioSize[20] = { '\0' };
+	//snprintf(szVedioSize, 20, "%dx%d", 1920, 1080);
+
 	AVDictionary* options = NULL;
 	av_dict_set_int(&options, "rtbufsize", 3041280 * 20, 0);
+	//av_dict_set(&options, "video_size", szVedioSize, 0);
+	//av_dict_set(&options, "pixel_format", av_get_pix_fmt_name(AV_PIX_FMT_YUYV422), 0);
+	//av_dict_set(&options, "framerate", "30", 0);
 
 	AVFormatContext* formatContext_input = avformat_alloc_context();
 
 	AVInputFormat* fmt = av_find_input_format("dshow");
 
-	avformat_open_input(&formatContext_input, vdevice_in_url, fmt, &options);
+	int ret = avformat_open_input(&formatContext_input, vdevice_in_url, fmt, &options);
+
+	if (ret)
+	{
+		printf("avformat_open_input error \n");
+	}
 
 	av_dict_free(&options);
 
@@ -212,6 +260,7 @@ AVPacket* FFmpegLib::ReadFrame(AVFormatContext* formatContext_input, AVPacket* a
 		{
 			if (avpkt_in->size > 0)
 			{
+				avpkt_in->pts = av_gettime();
 				return avpkt_in;
 			}
 		}

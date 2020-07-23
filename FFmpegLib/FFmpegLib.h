@@ -23,6 +23,7 @@
 #include <windows.h>
 #include <vector>
 #include <dshow.h>
+#include <mutex>
 
 
 extern "C"
@@ -64,9 +65,9 @@ public:
 
 	char* WCharToChar(WCHAR* s);
 	HRESULT GetAudioVideoInputDevices(std::vector<TDeviceName>& vectorDevices, REFGUID guidValue);
-	AVCodecContext* CreateVideoEncodec(int cid, int width_output, int heigth_output);
+	AVCodecContext* CreateVideoEncodec(int cid, int width_output, int heigth_output, int frame_rate);
 	AVCodecContext* CreateAudioEncodec(int cid, int out_sample_rate);
-	int EncodecFrame(AVFormatContext* formatContext_output, AVCodecContext* codecContext_output, AVPacket* avpkt_out, AVFrame* avFrame_output);
+	int EncodecFrame(AVFormatContext* formatContext_output, AVCodecContext* codecContext_output, AVPacket* avpkt_in, AVPacket* avpkt_out, AVFrame* avFrame_output,AVRational itime);
 	//int EncodecVideoFrame(AVFormatContext* formatContext_output, AVCodecContext* codecContext_output, AVPacket* avpkt_out, AVFrame* avFrame_output, size_t pts);
 
 	AVFormatContext* CreateFormatOutput(const char* format_name, const char* file_out_path);

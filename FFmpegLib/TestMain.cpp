@@ -3,18 +3,23 @@
 
 FFmpegLib fflib;
 
-char file_out_path[] = "../out/result_file.flv";
+//char file_out_path[] = "../out/result_file.flv";
+char file_out_path[] = "rtmp://49.232.191.221/live/hkz";
 
 int width_output = 0;//等于0 默认为输出宽度
 int heigth_output = 0;//等于0 默认为输出高度
-int fps_output = 0;//等于0 默认为输入设备的最大帧率 此值只能小于等于设备最大帧率
+int frame_rate = 30;//等于0 默认为输入设备的最大帧率 此值只能小于等于设备最大帧率
 
 int out_sample_rate = 44100;//音频采样
 
 AVFormatContext* formatContext_output;
 AVCodecContext* encodecContext_output;
 
-int count_frame = 30 * 10 * 1;
+long long start_time = av_gettime();
+long long pts_time = 0;
+
+bool isRun = true;
+int isEnd = 0;
 
 int main()
 {
@@ -49,20 +54,40 @@ int main()
 
     std::thread thread_video([videoDevices]() {
         startCamera(videoDevices[1].name);
+        isEnd++;
     });
 
-    //std::thread thread_audio([audioDevices]() {
-    //    startMicrophone(audioDevices[0].name);
-    //});
+    std::thread thread_audio([audioDevices]() {
+        startMicrophone(audioDevices[0].name);
+        isEnd++;
+    });
 
 
+    //av_usleep(1000*1000*15);
+
+    //isRun = false;
+    //while (true)
+    //{
+    //    if (isEnd == 2) {
+    //        break;
+    //    }
+
+    //}
+
+    //av_write_trailer(formatContext_output);
+    //avio_close(formatContext_output->pb);
     getchar();
 }
 
 
 void startCamera(const char* vdevice_in_url) {
-    AVFormatContext* formatContext_vinput = fflib.OpenCamera(vdevice_in_url);
+    
+    AVFrame* avFrame_in = av_frame_alloc();
+    AVFrame* avFrame_out = av_frame_alloc();
+    AVPacket* avpkt_in = av_packet_alloc();
+    AVPacket* avpkt_out = av_packet_alloc();
 
+    AVFormatContext* formatContext_vinput = fflib.OpenCamera(vdevice_in_url);
     AVStream* stream_in = formatContext_vinput->streams[0];
 
     if (width_output == 0)
@@ -71,47 +96,35 @@ void startCamera(const char* vdevice_in_url) {
     if (heigth_output == 0)
         heigth_output = stream_in->codecpar->height;
 
-    int frame_rate = stream_in->avg_frame_rate.num / stream_in->avg_frame_rate.den;//每秒多少帧
-    std::cout << "设备帧率:" << frame_rate << std::endl;
-
     AVCodecContext* codecContext_input = fflib.CreateDecodec(stream_in->codecpar);
-
-    AVFrame* avFrame_in = av_frame_alloc();
-    AVFrame* avFrame_out = av_frame_alloc();
     SwsContext* swsContext = fflib.CreateSwsContext(codecContext_input, avFrame_out, width_output, heigth_output);
-    AVPacket* avpkt_in = av_packet_alloc();
-    AVPacket* avpkt_out = av_packet_alloc();
 
-
-    AVCodecContext* vEncodecContext = fflib.CreateVideoEncodec(AV_CODEC_ID_H264, width_output, heigth_output);
-
-    AVStream* vStream_output = fflib.CreateStream(formatContext_output, vEncodecContext);
-
+    /// <summary>
+    /// 输出
+    /// </summary>
+    AVCodecContext* codecContext_output = fflib.CreateVideoEncodec(AV_CODEC_ID_H264, width_output, heigth_output, frame_rate);
+    AVStream* vStream_output = fflib.CreateStream(formatContext_output, codecContext_output);
     fflib.OpenOutputIO(formatContext_output, file_out_path);
 
-    //30帧 分钟
-
-    //long long start = av_gettime();
-    for (size_t pts = 0; pts < count_frame; pts++)
+    while (isRun)
     {
+
         fflib.ReadFrame(formatContext_vinput, avpkt_in);
         int ret = fflib.DecodecFrame(codecContext_input, avpkt_in, avFrame_in);
-        av_packet_unref(avpkt_in);
         if (ret == 0)
         {
             int  sws = fflib.StartSws(swsContext, avFrame_in, avFrame_out);
 
-            avFrame_out->pts = vStream_output->time_base.den / frame_rate * pts;
+           avFrame_out->pts = avpkt_in->pts - start_time;
 
-            int result = fflib.EncodecFrame(formatContext_output, vEncodecContext, avpkt_out, avFrame_out);
+            int result = fflib.EncodecFrame(formatContext_output, codecContext_output, avpkt_in,avpkt_out, avFrame_out, stream_in->time_base);
             if (result) {
                 //pts--;
                 //std::cout << "编码失败:" << result << std::endl;
             }
         }
+        av_packet_unref(avpkt_in);
     }
-
-    av_write_trailer(formatContext_output);
 
     av_frame_free(&avFrame_in);
     av_frame_free(&avFrame_out);
@@ -154,12 +167,12 @@ void startMicrophone(const char* adevice_in_url) {
 
     fflib.initAudioFilter(args, out_sample_rate, buffer_src_ctx, buffer_sink_ctx);
 
-
-    for (size_t pts = 0; pts < count_frame; pts++)
+    while (isRun)
     {
+        //pts++;
         fflib.ReadFrame(formatContext_input, avpkt_in);
         int ret = fflib.DecodecFrame(codecContext_input, avpkt_in, avFrame_in);
-        av_packet_unref(avpkt_in);
+        
         if (ret == 0)
         {
 
@@ -173,29 +186,33 @@ void startMicrophone(const char* adevice_in_url) {
             ret = av_buffersink_get_frame_flags(buffer_sink_ctx, avFrame_out, AV_BUFFERSINK_FLAG_NO_REQUEST);
             if (ret < 0)
             {
+                //pts--;
                 continue;
             }
 
-            int frame_rate = out_sample_rate/ avFrame_out->nb_samples;
+            
 
-            avFrame_out->pts = stream_output->time_base.den / frame_rate * pts;
-
-            //avFrame_out->pts = av_rescale_q(avFrame_out->nb_samples * pts, {1,44100}, stream_output->time_base);
+            avFrame_out->pts = avpkt_in->pts - start_time;
+            //avFrame_out->pts = pts;
+            //avFrame_out->pts = stream_output->time_base.den / aframe_rate * pts;
+            //avFrame_out->pts = av_rescale_q(avFrame_out->nb_samples * pts, encodecContext->time_base, stream_output->time_base);
 
             //std::cout << "音频pts:" << avFrame_out->pts << std::endl;
 
-            int result = fflib.EncodecFrame(formatContext_output, encodecContext, avpkt_out, avFrame_out);
+            int result = fflib.EncodecFrame(formatContext_output, encodecContext, avpkt_out, avpkt_in,avFrame_out, stream_input->time_base);
             if (result) {
                 //pts--;
                 //std::cout << "编码失败:" << result << std::endl;
             }
         }
-    }
 
-    av_write_trailer(formatContext_output);
+        av_packet_unref(avpkt_in);
+    }
 
     av_frame_free(&avFrame_in);
     av_frame_free(&avFrame_out);
     avcodec_free_context(&codecContext_input);
+    avio_close(formatContext_input->pb);
     avformat_close_input(&formatContext_input);
+
 }
