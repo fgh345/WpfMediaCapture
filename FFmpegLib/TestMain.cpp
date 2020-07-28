@@ -3,8 +3,8 @@
 
 FFmpegLib fflib;
 
-//char file_out_path[] = "../out/result_file.flv";
-char file_out_path[] = "rtmp://49.232.191.221/live/hkz";
+char file_out_path[] = "../out/result_file.flv";
+//char file_out_path[] = "rtmp://49.232.191.221/live/hkz";
 
 int width_output = 0;//等于0 默认为输出宽度
 int heigth_output = 0;//等于0 默认为输出高度
@@ -53,7 +53,7 @@ int main()
     formatContext_output = fflib.CreateFormatOutput("flv", file_out_path);
 
     std::thread thread_video([videoDevices]() {
-        startCamera(videoDevices[1].name);
+        startCamera(videoDevices[0].name);
         isEnd++;
     });
 
