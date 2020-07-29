@@ -4,10 +4,13 @@ using namespace std;
 
 bool isPre = false;//输出准备完成
 
+
+
+
 FFmpegLib::FFmpegLib()
 {
 	avdevice_register_all();
-	//avformat_network_init();
+
 }
 
 FFmpegLib::~FFmpegLib()
@@ -267,11 +270,15 @@ AVPacket* FFmpegLib::ReadFrame(AVFormatContext* formatContext_input, AVPacket* a
 	}
 }
 
-int FFmpegLib::DecodecFrame(AVCodecContext* codecContext_input, AVPacket* avpkt_in, AVFrame* avFrame_in)
+int FFmpegLib::DecodecFrame(AVCodecContext* codecContext_input, AVPacket* avpkt_in)
 {
+	AVFrame* avFrame_in = av_frame_alloc();
+
 	if (avcodec_send_packet(codecContext_input, avpkt_in) == 0) {
-		av_frame_unref(avFrame_in);
-		return avcodec_receive_frame(codecContext_input, avFrame_in);
+		if (avcodec_receive_frame(codecContext_input, avFrame_in) ==0) {
+			Push(avFrame_in);
+			return 0;
+		}
 	}
 	return  -1;
 }
@@ -473,4 +480,34 @@ HRESULT FFmpegLib::GetAudioVideoInputDevices(std::vector<TDeviceName>& vectorDev
 	pSysDevEnum->Release();
 	CoUninitialize();
 	return hr;
+}
+
+void FFmpegLib::Push(AVFrame* d)
+{
+	mutex.lock();
+	if (datas.size() > 255)
+	{
+		//datas.front().Drop();
+		datas.pop_front();
+	}
+	datas.push_back(d);
+
+	cout << "size" << datas.size() << endl;
+
+
+	mutex.unlock();
+}
+
+AVFrame* FFmpegLib::Pop()
+{
+	mutex.lock();
+	if (datas.empty())
+	{
+		mutex.unlock();
+		return nullptr;
+	}
+	AVFrame* d = datas.front();
+	datas.pop_front();
+	mutex.unlock();
+	return d;
 }

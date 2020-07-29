@@ -24,6 +24,7 @@
 #include <vector>
 #include <dshow.h>
 #include <mutex>
+#include <list>
 
 
 extern "C"
@@ -78,13 +79,19 @@ public:
 	AVFormatContext* OpenMicrophone(const char* adevice_in_url);
 	AVCodecContext* CreateDecodec(AVCodecParameters* codecpar);
 	AVPacket* ReadFrame(AVFormatContext* formatContext_input, AVPacket* avpkt_in);
-	int DecodecFrame(AVCodecContext* codecContext_input, AVPacket* avpkt_in, AVFrame* avFrame_in);
+	int DecodecFrame(AVCodecContext* codecContext_input, AVPacket* avpkt_in);
 	SwsContext* CreateSwsContext(AVCodecContext* codecContext_input, AVFrame* avFrame, int width_output = 0, int heigth_output = 0);
 	int StartSws(SwsContext* swsContext, AVFrame* avFrame_in, AVFrame* avFrame_out);
 	void initAudioFilter(char* args, int sample_rate, AVFilterContext*& buffer_src_ctx, AVFilterContext*& buffer_sink_ctx);
 
+	virtual void Push(AVFrame* d);
+	virtual AVFrame* Pop();
+
 private:
 	void XError(int errNum, const char tit[]);
 	AVCodecContext* CreateEncodec(int cid);
+
 	
+	std::list<AVFrame*> datas;
+	std::mutex mutex;
 };

@@ -53,7 +53,7 @@ int main()
     formatContext_output = fflib.CreateFormatOutput("flv", file_out_path);
 
     std::thread thread_video([videoDevices]() {
-        startCamera(videoDevices[0].name);
+        startCamera(videoDevices[1].name);
         isEnd++;
     });
 
@@ -66,13 +66,22 @@ int main()
     //av_usleep(1000*1000*15);
 
     //isRun = false;
-    //while (true)
-    //{
-    //    if (isEnd == 2) {
-    //        break;
-    //    }
+    while (true)
+    {
 
-    //}
+        AVFrame* avFrame_in = fflib.Pop();
+        if (avFrame_in!=nullptr)
+            std::cout << "sam:"<<avFrame_in->nb_samples << std::endl;
+            /*if (avFrame_in->nb_samples == 1024)
+            {
+                std::cout<<"@"<< std::endl;
+            }
+            else if (avFrame_in->nb_samples == AV_PIX_FMT_YUV420P)
+            {
+                std::cout << "#" << std::endl;
+            }*/
+
+    }
 
     //av_write_trailer(formatContext_output);
     //avio_close(formatContext_output->pb);
@@ -82,10 +91,10 @@ int main()
 
 void startCamera(const char* vdevice_in_url) {
     
-    AVFrame* avFrame_in = av_frame_alloc();
+    //AVFrame* avFrame_in = av_frame_alloc();
     AVFrame* avFrame_out = av_frame_alloc();
     AVPacket* avpkt_in = av_packet_alloc();
-    AVPacket* avpkt_out = av_packet_alloc();
+    //AVPacket* avpkt_out = av_packet_alloc();
 
     AVFormatContext* formatContext_vinput = fflib.OpenCamera(vdevice_in_url);
     AVStream* stream_in = formatContext_vinput->streams[0];
@@ -110,23 +119,22 @@ void startCamera(const char* vdevice_in_url) {
     {
 
         fflib.ReadFrame(formatContext_vinput, avpkt_in);
-        int ret = fflib.DecodecFrame(codecContext_input, avpkt_in, avFrame_in);
-        if (ret == 0)
-        {
-            int  sws = fflib.StartSws(swsContext, avFrame_in, avFrame_out);
+        int ret = fflib.DecodecFrame(codecContext_input, avpkt_in);
+        //if (ret == 0)
+        //{
+        //    int  sws = fflib.StartSws(swsContext, avFrame_in, avFrame_out);
 
-           avFrame_out->pts = avpkt_in->pts - start_time;
+        //   avFrame_out->pts = avpkt_in->pts - start_time;
 
-            int result = fflib.EncodecFrame(formatContext_output, codecContext_output, avpkt_in,avpkt_out, avFrame_out, stream_in->time_base);
-            if (result) {
-                //pts--;
-                //std::cout << "±àÂëÊ§°Ü:" << result << std::endl;
-            }
-        }
+        //    int result = fflib.EncodecFrame(formatContext_output, codecContext_output, avpkt_in,avpkt_out, avFrame_out, stream_in->time_base);
+        //    if (result) {
+        //        //pts--;
+        //        //std::cout << "±àÂëÊ§°Ü:" << result << std::endl;
+        //    }
+        //}
         av_packet_unref(avpkt_in);
     }
 
-    av_frame_free(&avFrame_in);
     av_frame_free(&avFrame_out);
     sws_freeContext(swsContext);
     avcodec_free_context(&codecContext_input);
@@ -148,7 +156,6 @@ void startMicrophone(const char* adevice_in_url) {
 
     fflib.OpenOutputIO(formatContext_output, file_out_path);
 
-    AVFrame* avFrame_in = av_frame_alloc();
     AVFrame* avFrame_out = av_frame_alloc();
     AVPacket* avpkt_in = av_packet_alloc();
     AVPacket* avpkt_out = av_packet_alloc();
@@ -171,45 +178,45 @@ void startMicrophone(const char* adevice_in_url) {
     {
         //pts++;
         fflib.ReadFrame(formatContext_input, avpkt_in);
-        int ret = fflib.DecodecFrame(codecContext_input, avpkt_in, avFrame_in);
+        int ret = fflib.DecodecFrame(codecContext_input, avpkt_in);
         
-        if (ret == 0)
-        {
+        //if (ret == 0)
+        //{
 
-            //×ª»»Êý¾Ý¸ñÊ½
-            int ret = av_buffersrc_add_frame_flags(buffer_src_ctx, avFrame_in, AV_BUFFERSRC_FLAG_PUSH);
-            if (ret < 0)
-            {
-                //XError(ret);
-            }
+        //    //×ª»»Êý¾Ý¸ñÊ½
+        //    int ret = av_buffersrc_add_frame_flags(buffer_src_ctx, avFrame_in, AV_BUFFERSRC_FLAG_PUSH);
+        //    if (ret < 0)
+        //    {
+        //        //XError(ret);
+        //    }
 
-            ret = av_buffersink_get_frame_flags(buffer_sink_ctx, avFrame_out, AV_BUFFERSINK_FLAG_NO_REQUEST);
-            if (ret < 0)
-            {
-                //pts--;
-                continue;
-            }
+        //    ret = av_buffersink_get_frame_flags(buffer_sink_ctx, avFrame_out, AV_BUFFERSINK_FLAG_NO_REQUEST);
+        //    if (ret < 0)
+        //    {
+        //        //pts--;
+        //        continue;
+        //    }
 
-            
+        //    
 
-            avFrame_out->pts = avpkt_in->pts - start_time;
-            //avFrame_out->pts = pts;
-            //avFrame_out->pts = stream_output->time_base.den / aframe_rate * pts;
-            //avFrame_out->pts = av_rescale_q(avFrame_out->nb_samples * pts, encodecContext->time_base, stream_output->time_base);
+        //    avFrame_out->pts = avpkt_in->pts - start_time;
+        //    //avFrame_out->pts = pts;
+        //    //avFrame_out->pts = stream_output->time_base.den / aframe_rate * pts;
+        //    //avFrame_out->pts = av_rescale_q(avFrame_out->nb_samples * pts, encodecContext->time_base, stream_output->time_base);
 
-            //std::cout << "ÒôÆµpts:" << avFrame_out->pts << std::endl;
+        //    //std::cout << "ÒôÆµpts:" << avFrame_out->pts << std::endl;
 
-            int result = fflib.EncodecFrame(formatContext_output, encodecContext, avpkt_out, avpkt_in,avFrame_out, stream_input->time_base);
-            if (result) {
-                //pts--;
-                //std::cout << "±àÂëÊ§°Ü:" << result << std::endl;
-            }
-        }
+        //    int result = fflib.EncodecFrame(formatContext_output, encodecContext, avpkt_out, avpkt_in,avFrame_out, stream_input->time_base);
+        //    if (result) {
+        //        //pts--;
+        //        //std::cout << "±àÂëÊ§°Ü:" << result << std::endl;
+        //    }
+        //}
 
         av_packet_unref(avpkt_in);
     }
 
-    av_frame_free(&avFrame_in);
+    //av_frame_free(&avFrame_in);
     av_frame_free(&avFrame_out);
     avcodec_free_context(&codecContext_input);
     avio_close(formatContext_input->pb);
