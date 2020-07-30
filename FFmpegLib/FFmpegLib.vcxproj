@@ -145,10 +145,12 @@
   <ItemGroup>
     <ClCompile Include="FFmpegLib.cpp" />
     <ClCompile Include="TestMain.cpp" />
+    <ClCompile Include="ZFrame.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="FFmpegLib.h" />
     <ClInclude Include="TestMain.h" />
+    <ClInclude Include="ZFrame.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

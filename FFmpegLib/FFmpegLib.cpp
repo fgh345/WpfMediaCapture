@@ -98,15 +98,15 @@ AVFormatContext* FFmpegLib::CreateFormatOutput(const char* format_name ,const ch
 	return formatContext_output;
 }
 
-int FFmpegLib::EncodecFrame(AVFormatContext* formatContext_output,AVCodecContext* codecContext_output, AVPacket* avpkt_in, AVPacket* avpkt_out, AVFrame* avFrame_output, AVRational itime)
+int FFmpegLib::EncodecFrame(AVFormatContext* formatContext_output,AVCodecContext* codecContext_output, AVFrame* avFrame_output)
 {
-	//mutex().lock();
 
 	int ret = avcodec_send_frame(codecContext_output, avFrame_output);
 	if (ret) {
 		XError(ret,"avcodec_send_frame");
 		return ret;
 	}
+	AVPacket* avpkt_out = av_packet_alloc();
 
 	ret = avcodec_receive_packet(codecContext_output, avpkt_out);
 	if (ret) {
@@ -118,25 +118,25 @@ int FFmpegLib::EncodecFrame(AVFormatContext* formatContext_output,AVCodecContext
 	if (codecContext_output->codec_type == AVMEDIA_TYPE_VIDEO) {
 		avpkt_out->stream_index = 0;
 
-		//AVRational itime = ictx->streams[packet.stream_index]->time_base;
-		AVRational otime = formatContext_output->streams[avpkt_out->stream_index]->time_base;
+		//AVRational otime = formatContext_output->streams[avpkt_out->stream_index]->time_base;
 
-		avpkt_out->pts = av_rescale_q_rnd(avpkt_out->pts, itime, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-		avpkt_out->dts = av_rescale_q_rnd(avpkt_out->dts, itime, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-		avpkt_out->duration = av_rescale_q_rnd(avpkt_out->duration, itime, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		//avpkt_out->pts = av_rescale_q_rnd(avpkt_out->pts, {1,1000}, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		//avpkt_out->dts = av_rescale_q_rnd(avpkt_out->dts, { 1,1000 }, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		//avpkt_out->duration = av_rescale_q_rnd(avpkt_out->duration, { 1,1000 }, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
 		avpkt_out->pos = -1;
 
 
-		printf("                                                      @@pts:%d,dts:%d,size:%d,duration:%d\n", avpkt_out->pts, avpkt_out->dts, avpkt_out->size, avpkt_out->duration);
+		printf("@@pts:%d,dts:%d,size:%d,duration:%d\n", avpkt_out->pts, avpkt_out->dts, avpkt_out->size, avpkt_out->duration);
 	}else if (codecContext_output->codec_type== AVMEDIA_TYPE_AUDIO)
 	{
 		avpkt_out->stream_index = 1;
 
-		AVRational otime = formatContext_output->streams[avpkt_out->stream_index]->time_base;
+		//AVRational otime = formatContext_output->streams[avpkt_out->stream_index]->time_base;
 
-		avpkt_out->pts = av_rescale_q_rnd(avpkt_out->pts, itime, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-		avpkt_out->dts = av_rescale_q_rnd(avpkt_out->dts, itime, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-		avpkt_out->duration = av_rescale_q_rnd(avpkt_out->duration, itime, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		//avpkt_out->pts = av_rescale_q_rnd(avpkt_out->pts, { 1,1000 }, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		//avpkt_out->dts = av_rescale_q_rnd(avpkt_out->dts, { 1,1000 }, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+		//avpkt_out->duration = av_rescale_q_rnd(avpkt_out->duration, { 1,1000 }, otime, (AVRounding)(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+
 		avpkt_out->pos = -1;
 
 		printf("##pts:%d,dts:%d,size:%d,duration:%d\n", avpkt_out->pts, avpkt_out->dts, avpkt_out->size, avpkt_out->duration);
@@ -276,10 +276,16 @@ int FFmpegLib::DecodecFrame(AVCodecContext* codecContext_input, AVPacket* avpkt_
 
 	if (avcodec_send_packet(codecContext_input, avpkt_in) == 0) {
 		if (avcodec_receive_frame(codecContext_input, avFrame_in) ==0) {
-			Push(avFrame_in);
+
+			ZFrame z;
+			z.avFrame = avFrame_in;
+			avFrame_in->pts = avpkt_in->pts;
+			z.codec_type = (int)codecContext_input->codec_type;
+			Push(z);
 			return 0;
 		}
 	}
+	
 	return  -1;
 }
 
@@ -294,9 +300,6 @@ SwsContext* FFmpegLib::CreateSwsContext(AVCodecContext* codecContext_input, AVFr
 	SwsContext* swsContext = sws_getCachedContext(NULL, codecContext_input->width, codecContext_input->height, codecContext_input->pix_fmt,
 		width_output, heigth_output, AV_PIX_FMT_YUV420P,
 		SWS_BICUBIC, 0, 0, 0);
-
-
-
 
 	avFrame->format = AV_PIX_FMT_YUV420P;
 	avFrame->width = width_output;
@@ -482,31 +485,28 @@ HRESULT FFmpegLib::GetAudioVideoInputDevices(std::vector<TDeviceName>& vectorDev
 	return hr;
 }
 
-void FFmpegLib::Push(AVFrame* d)
+void FFmpegLib::Push(ZFrame d)
 {
 	mutex.lock();
 	if (datas.size() > 255)
 	{
-		//datas.front().Drop();
+		datas.front().Drop();
 		datas.pop_front();
 	}
 	datas.push_back(d);
 
-	cout << "size" << datas.size() << endl;
-
-
 	mutex.unlock();
 }
 
-AVFrame* FFmpegLib::Pop()
+ZFrame FFmpegLib::Pop()
 {
 	mutex.lock();
 	if (datas.empty())
 	{
 		mutex.unlock();
-		return nullptr;
+		return ZFrame();
 	}
-	AVFrame* d = datas.front();
+	ZFrame d = datas.front();
 	datas.pop_front();
 	mutex.unlock();
 	return d;

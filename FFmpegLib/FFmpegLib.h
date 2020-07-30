@@ -25,6 +25,7 @@
 #include <dshow.h>
 #include <mutex>
 #include <list>
+#include "ZFrame.h"
 
 
 extern "C"
@@ -68,7 +69,7 @@ public:
 	HRESULT GetAudioVideoInputDevices(std::vector<TDeviceName>& vectorDevices, REFGUID guidValue);
 	AVCodecContext* CreateVideoEncodec(int cid, int width_output, int heigth_output, int frame_rate);
 	AVCodecContext* CreateAudioEncodec(int cid, int out_sample_rate);
-	int EncodecFrame(AVFormatContext* formatContext_output, AVCodecContext* codecContext_output, AVPacket* avpkt_in, AVPacket* avpkt_out, AVFrame* avFrame_output,AVRational itime);
+	int EncodecFrame(AVFormatContext* formatContext_output, AVCodecContext* codecContext_output, AVFrame* avFrame_output);
 	//int EncodecVideoFrame(AVFormatContext* formatContext_output, AVCodecContext* codecContext_output, AVPacket* avpkt_out, AVFrame* avFrame_output, size_t pts);
 
 	AVFormatContext* CreateFormatOutput(const char* format_name, const char* file_out_path);
@@ -84,14 +85,14 @@ public:
 	int StartSws(SwsContext* swsContext, AVFrame* avFrame_in, AVFrame* avFrame_out);
 	void initAudioFilter(char* args, int sample_rate, AVFilterContext*& buffer_src_ctx, AVFilterContext*& buffer_sink_ctx);
 
-	virtual void Push(AVFrame* d);
-	virtual AVFrame* Pop();
+	virtual void Push(ZFrame d);
+	virtual ZFrame Pop();
 
 private:
 	void XError(int errNum, const char tit[]);
 	AVCodecContext* CreateEncodec(int cid);
 
 	
-	std::list<AVFrame*> datas;
+	std::list<ZFrame> datas;
 	std::mutex mutex;
 };

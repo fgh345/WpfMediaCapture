@@ -21,12 +21,18 @@
     <ClCompile Include="TestMain.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="ZFrame.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="FFmpegLib.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="TestMain.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="ZFrame.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
