@@ -107,7 +107,6 @@ int main()
     getchar();
 }
 
-
 void startCamera(const char* vdevice_in_url) {
     
     AVPacket* avpkt_in = av_packet_alloc();
